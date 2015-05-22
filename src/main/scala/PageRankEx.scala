@@ -1,6 +1,6 @@
-//spark-shell --num-executors 3 --executor-memory ${1-60}G --executor-cores ${2-32}  -Dspark.akka.frameSize=512000 --master yarn
-import org.apache.spark._
+import org.apache.spark.SparkContext._
 import org.apache.spark.graphx._
+import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import math.abs
 // We need three different files for this analysis
@@ -31,6 +31,25 @@ class DSV (var line:String="", var delimiter:String=",",var parts:Array[String]=
 	}
 }
 
+
+
+object PageRankCalculator extends Serializable{
+
+                val conf = new SparkConf().setMaster("yarn-client")
+		//setMaster("spark://messi.ischool.uw.edu:7077")
+                .setAppName("DailyModalTower")
+                .set("spark.shuffle.consolidateFiles", "true")
+		.set("spark.storage.blockManagerHeartBeatMs", "300000")
+                //.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+                //.set("spark.kryo.registrator", "MyRegistrator")
+                .set("spark.akka.frameSize","512")
+                .set("spark.default.parallelism","200")
+                //.set("spark.executor.memory", "40g")
+                .set("spark.kryoserializer.buffer.max.mb","10024")
+                .set("spark.kryoserializer.buffer.mb","1024")
+
+                val sc = new SparkContext(conf)
+	
 def filterKigaliContacts(final_rawCalls_ABparty_w_Loc:RDD[(String, (Int,String, String, String, String, String))]):RDD[(String, (Int,String, String, String, String, String))]={
 	var filteredRDD=final_rawCalls_ABparty_w_Loc.filter{case(k,v)=>(v._6=="Kigali")}
 	filteredRDD
@@ -52,10 +71,7 @@ def filterHomeProvContacts(final_rawCalls_ABparty_w_Loc:RDD[(String, (Int,String
 	filteredRDD
 }
 
-def triangleCountWithIds(gr):{
-
-}
-val r=scala.util.Random
+//val r=scala.util.Random
 //def calculatePageRank(final_rawCalls_ABparty_w_Loc:RDD[(String, (Int,String, String, String, String, String))], month:String, filename:String):{RDD[(String, (Double))],RDD[(String, (Double))],Graph[String,Int]}={
 def calculatePageRank(final_rawCalls_ABparty_w_Loc:RDD[(String, (Int,String, String, String, String, String))], month:String, filename:String):(RDD[(String, (Double))],RDD[(String, (Double))],Graph[String,Int])={
 	
@@ -78,7 +94,7 @@ def calculatePageRank(final_rawCalls_ABparty_w_Loc:RDD[(String, (Int,String, Str
 	var g=Graph(vertices, edges)
 	val ranks = g.pageRank(0.0001).vertices
 	var ego_pagerank=vertices.join(ranks).distinct().map{case(k,v)=>(v._1,v._2)}
-	//ego_pagerank.saveAsTextFile("Rwanda_Out/EgoPageRank-"+month+""+filename)
+	//ego_pagerank.saveAsTextFile("Rwanda_Out/PageRanks/EgoPageRank-"+month+""+filename)
 	val averageRank: VertexRDD[Double] = g.mapReduceTriplets[(Int, Double)](
 	  // map function returns a tuple of (1, Age)
 	  edge => Iterator((edge.dstId, (1, edge.attr.toDouble))),
@@ -90,7 +106,10 @@ def calculatePageRank(final_rawCalls_ABparty_w_Loc:RDD[(String, (Int,String, Str
 	(ego_pagerank,neighbors_avg_pagerank,g)
 }
 
-var month="0803"
+	def main(args:Array[String]){
+
+
+var month=args(0)
 //This is the raw calls file
 var rawCallsFilePath="Rwanda_In/CallsFiles/"+month+"-Call.pai.sordate.txt"
 
@@ -144,49 +163,51 @@ var final_rawCalls_ABparty_w_Loc= rawCalls_ABparty_w_Loc.map{case(k,v)=>(v._1._1
 final_rawCalls_ABparty_w_Loc.take(10).foreach(println)
 var (egoRank, neighborRank,gr)=calculatePageRank(final_rawCalls_ABparty_w_Loc, month, "overall_pagerank.csv")
 
-ego_pagerank.saveAsTextFile("Rwanda_Out/EgoPageRank-"+month+"overall.csv")
-neighborRank.saveAsTextFile("Rwanda_Out/AvgNeighborPageRank-"+month+"overall.csv")
+egoRank.saveAsTextFile("Rwanda_Out/PageRanks/EgoPageRank-"+month+"overall.csv")
+neighborRank.saveAsTextFile("Rwanda_Out/PageRanks/AvgNeighborPageRank-"+month+"overall.csv")
 var edgeListFile=final_rawCalls_ABparty_w_Loc.map{case(k,v)=>(k,v._4)}
-edgeListFile.saveAsTextFile("Rwanda_Out/EdgeList-"+month+".csv")
+edgeListFile.saveAsTextFile("Rwanda_Out/PageRanks/EdgeList-"+month+".csv")
 
 var KigaliBPartyRDD=filterKigaliContacts(final_rawCalls_ABparty_w_Loc)
 KigaliBPartyRDD.count()
 var (egoRank_kg, neighborRank_kg,gr_kg)=calculatePageRank(KigaliBPartyRDD, month, "kigali_pagerank.csv")
-egoRank_kg.saveAsTextFile("Rwanda_Out/EgoPageRank-kg-"+month+"overall.csv")
-neighborRank_kg.saveAsTextFile("Rwanda_Out/AvgNeighborPageRank-kg-"+month+"overall.csv")
+egoRank_kg.saveAsTextFile("Rwanda_Out/PageRanks/EgoPageRank-kg-"+month+"overall.csv")
+neighborRank_kg.saveAsTextFile("Rwanda_Out/PageRanks/AvgNeighborPageRank-kg-"+month+"overall.csv")
 
 var edgeListFile_kg=KigaliBPartyRDD.map{case(k,v)=>(k,v._4)}
 
-edgeListFile_kg.saveAsTextFile("Rwanda_Out/EdgeList_kg-"+month+".csv")
+edgeListFile_kg.saveAsTextFile("Rwanda_Out/PageRanks/EdgeList_kg-"+month+".csv")
 
 
 var NonKigaliBPartyRDD=filterNonKigaliContacts(final_rawCalls_ABparty_w_Loc)
 NonKigaliBPartyRDD.count()
 //calculatePageRank(NonKigaliBPartyRDD, month, "nonkigali_pagerank.csv")
 var (egoRank_nkg, neighborRank_nkg,gr_nkg)=calculatePageRank(NonKigaliBPartyRDD, month, "nonkigali_pagerank.csv")
-egoRank_nkg.saveAsTextFile("Rwanda_Out/EgoPageRank-nkg-"+month+"overall.csv")
-neighborRank_nkg.saveAsTextFile("Rwanda_Out/AvgNeighborPageRank-nkg-"+month+"overall.csv")
+egoRank_nkg.saveAsTextFile("Rwanda_Out/PageRanks/EgoPageRank-nkg-"+month+"overall.csv")
+neighborRank_nkg.saveAsTextFile("Rwanda_Out/PageRanks/AvgNeighborPageRank-nkg-"+month+"overall.csv")
 
 var edgeListFile_nkg=NonKigaliBPartyRDD.map{case(k,v)=>(k,v._4)}
-edgeListFile_nkg.saveAsTextFile("Rwanda_Out/EdgeList_nkg-"+month+".csv")
+edgeListFile_nkg.saveAsTextFile("Rwanda_Out/PageRanks/EdgeList_nkg-"+month+".csv")
 
 var HomeDistBPartyRDD=filterHomeDistContacts(final_rawCalls_ABparty_w_Loc)
 HomeDistBPartyRDD.count()
 var (egoRank_hd, neighborRank_hd,gr_hd)=calculatePageRank(HomeDistBPartyRDD, month, "homedist_pagerank.csv")
 //var (egoRank_homedist, neighborRank_homedist,gr_homedist)=calculatePageRank(NonKigaliBPartyRDD, month, "nonkigali_pagerank.csv")
-egoRank_hd.saveAsTextFile("Rwanda_Out/EgoPageRank-hd-"+month+"overall.csv")
-neighborRank_hd.saveAsTextFile("Rwanda_Out/AvgNeighborPageRank-hd-"+month+"overall.csv")
+egoRank_hd.saveAsTextFile("Rwanda_Out/PageRanks/EgoPageRank-hd-"+month+"overall.csv")
+neighborRank_hd.saveAsTextFile("Rwanda_Out/PageRanks/AvgNeighborPageRank-hd-"+month+"overall.csv")
 
 var edgeListFile_homedist=HomeDistBPartyRDD.map{case(k,v)=>(k,v._4)}
-edgeListFile_homedist.saveAsTextFile("Rwanda_Out/EdgeList_hd-"+month+".csv")
+edgeListFile_homedist.saveAsTextFile("Rwanda_Out/PageRanks/EdgeList_hd-"+month+".csv")
 
 
 var HomeProvBPartyRDD=filterHomeProvContacts(final_rawCalls_ABparty_w_Loc)
 HomeProvBPartyRDD.count()
 var (egoRank_hp, neighborRank_hp,gr_hp)=calculatePageRank(HomeProvBPartyRDD, month, "homeprov_pagerank.csv")
 //var (egoRank_homeprov, neighborRank_homeprov,gr_homeprov)=calculatePageRank(NonKigaliBPartyRDD, month, "nonkigali_pagerank.csv")
-egoRank_hp.saveAsTextFile("Rwanda_Out/EgoPageRank-hp-"+month+"overall.csv")
-neighborRank_hp.saveAsTextFile("Rwanda_Out/AvgNeighborPageRank-hp-"+month+"overall.csv")
+egoRank_hp.saveAsTextFile("Rwanda_Out/PageRanks/EgoPageRank-hp-"+month+"overall.csv")
+neighborRank_hp.saveAsTextFile("Rwanda_Out/PageRanks/AvgNeighborPageRank-hp-"+month+"overall.csv")
 
 var edgeListFile_homeprov=HomeProvBPartyRDD.map{case(k,v)=>(k,v._4)}
-edgeListFile_homeprov.saveAsTextFile("Rwanda_Out/EdgeList_hp-"+month+".csv")
+edgeListFile_homeprov.saveAsTextFile("Rwanda_Out/PageRanks/EdgeList_hp-"+month+".csv")
+}
+}
