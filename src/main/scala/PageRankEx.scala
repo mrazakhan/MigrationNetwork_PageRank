@@ -153,14 +153,25 @@ var rawCalls_ABparty_w_Loc=rawCalls_Aparty_w_Loc.map{case(k,v)=>(v._1,(k,v._2,v.
 (L26631007,((L01678769,Rubavu,West),(Burera,North)))
 */
 rawCalls_ABparty_w_Loc.take(10).foreach(println)
-var final_rawCalls_ABparty_w_Loc= rawCalls_ABparty_w_Loc.map{case(k,v)=>(v._1._1,(v._1._2,v._1._3,v._1._4,k,v._2._1,v._2._2))}.distinct()
+var forward_rawCalls_ABparty_w_Loc= rawCalls_ABparty_w_Loc.map{case(k,v)=>(v._1._1,(v._1._2,v._1._3,v._1._4,k,v._2._1,v._2._2))}.distinct()
 /*
 (L99392707,(2,Nyarugenge,L93533845,Kigali,Kigali))
 (L31210403,(2,Rusizi,L05284321,Rusizi,West))
 (L83469369,(1,Kicukiro,L38716033,Kigali,Kigali))
 
 */
-final_rawCalls_ABparty_w_Loc.take(10).foreach(println)
+forward_rawCalls_ABparty_w_Loc.take(10).foreach(println)
+/*
+(L95013926,(2,Kigali,Kigali,L34805152,Kigali,Kigali))
+(L38373629,(1,Kigali,Kigali,L31373811,Kigali,Kigali))
+(L89382491,(1,Rusizi,West,L54968498,Kigali,Kigali))
+
+*/
+var final_rawCalls_ABparty_w_Loc_transpose=forward_rawCalls_ABparty_w_Loc.map{case(k,v)=>(v._4,(v._1,v._2,v._3,k,v._5,v._6))}
+final_rawCalls_ABparty_w_Loc_transpose.take(10).foreach(println)
+
+var final_rawCalls_ABparty_w_Loc=sc.union(forward_rawCalls_ABparty_w_Loc,final_rawCalls_ABparty_w_Loc_transpose)
+
 var (egoRank, neighborRank,gr)=calculatePageRank(final_rawCalls_ABparty_w_Loc, month, "overall_pagerank.csv")
 
 egoRank.saveAsTextFile("Rwanda_Out/PageRanks/EgoPageRank-"+month+"overall.csv")
